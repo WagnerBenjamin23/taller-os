@@ -1,0 +1,1 @@
+-- Fase 1: seed vacío intencional; no existen tablas de producto.

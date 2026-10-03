@@ -1,0 +1,45 @@
+@import 'tailwindcss';
+:root {
+  font-family: system-ui, sans-serif;
+  color: #172033;
+  background: #f4f6f9;
+}
+body {
+  margin: 0;
+  min-width: 280px;
+}
+main {
+  max-width: 640px;
+  margin: 12vh auto;
+  padding: 24px;
+}
+h1 {
+  font-size: clamp(2rem, 8vw, 3.5rem);
+  margin: 16px 0;
+}
+p {
+  line-height: 1.6;
+}
+.eyebrow {
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  color: #4b5563;
+}
+button {
+  font: inherit;
+  min-height: 44px;
+  padding: 12px 20px;
+  border: 0;
+  border-radius: 8px;
+  background: #172033;
+  color: white;
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+button:focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 4px;
+}
