@@ -91,7 +91,7 @@ Casos bloqueantes incluidos:
 
 `scripts/tenant-integration.mjs`: pendiente integración con Auth real, JWTs de prueba, Data API/PostgREST y Worker/workerd. Verifica aislamiento, DML directo/IDOR, roles, usuarios inactivos, dualidad, inmutabilidad y último OWNER. Requests concurrentes independientes comprueban onboarding duplicado, doble aceptación y dos OWNERS intentando degradarse simultáneamente. No utiliza claves administrativas en runtime; fixtures se crean por conexión SQL local, nunca remota.
 
-CI ejecutará start/reset/lint/pgTAP/build/integración/stop sobre Ubuntu compatible con Docker. Para cerrar el gate hace falta un run real aprobado y revisar/corregir posibles errores de las migraciones. Configurar CI por sí solo no satisface el gate.
+CI ejecutará el gate completo con Docker y Chromium sobre Ubuntu. Para cerrar el gate hace falta un run real aprobado y revisar/corregir posibles errores de las migraciones. Configurar CI por sí solo no satisface el gate.
 
 ## Archivos agregados/modificados
 
@@ -128,6 +128,28 @@ La entrega se detiene para revisión. Fase 3 no iniciada.
 3. Terminalidad: tercera migración, conflicto 409, trigger, botón oculto y tests. Tres nuevas assertions SQL más integración; las 64 anteriores permanecen sin reducir. Total pendiente SQL: 67.
 4. Documentación alineada con getUser(token), una llamada Auth adicional por request, timeout, latencia/disponibilidad y controles independientes de DB. No se promete revocación instantánea al logout.
 
-Estado del gate completo: intento de start/reset falló por ausencia de Docker/Podman; db lint/test no conectaron a PostgreSQL; integración falla antes de fixtures. No hay remote GitHub ni run CI disponible. CI ejecuta reset→lint público/privado→SQL→assets necesarios para runtime→integración→unitarios→lint→typecheck→builds→formato/config. No se considera completado. Las pruebas unitarias sí pasaron (51); formatos, lint, typecheck y builds también. No se modificaron políticas ni tests previos para hacerlos pasar.
+Estado del gate completo: intento de start/reset falló por ausencia de Docker/Podman; db lint/test no conectaron a PostgreSQL; integración falla antes de fixtures. No hay remote GitHub ni run CI disponible. CI ejecuta reset→lint público/privado→SQL→assets necesarios para runtime→integración→E2E→unitarios→lint→typecheck→builds→formato/config. No se considera completado. Las pruebas unitarias sí pasaron (51); formatos, lint, typecheck y builds también. No se modificaron políticas ni tests previos para hacerlos pasar.
 
 Las vistas HTML de la entrega anterior quedan como snapshot histórico: ya no existe el campo manual de token en la aplicación corregida. El ZIP corregido no incluye esas vistas históricas. No se avanzó a Fase 3 ni se desplegó.
+
+## Gate final con E2E de navegador
+
+Código de las correcciones aprobado por el usuario para pasar al gate; Fase 2 continúa pendiente del resultado real. Se agregó exactamente un E2E Playwright en `e2e/invitation.spec.ts`: usuario nuevo sin sesión abre `#invite`, se registra desde React, obtiene el email real desde Mailpit, visita el enlace de confirmación en otra pestaña del mismo contexto, atraviesa el callback PKCE, recupera la invitación pendiente, acepta desde la UI mediante Worker y ve el taller con rol RECEPTION. Comprueba también email confirmado y aceptación/membresía persistidas en PostgreSQL. No simula Auth, API, SMTP ni base; sólo el OWNER inicial se prepara con SQL local.
+
+`scripts/e2e-stack.mjs` obtiene las claves públicas del Supabase local y levanta Vite/Wrangler con la configuración existente, sin modificar archivos de entorno ni desplegar. El test requiere los puertos locales 54321/54322/54324/5173/8787; no admite un stack remoto. `e2e/reporter.ts` evita imprimir tokens, enlaces de confirmación y contraseñas; traces, videos y screenshots están deshabilitados. No genera estados de sesión exportados. Las fixtures quedan únicamente en la DB descartable, que se reinicia al comenzar cada gate.
+
+Archivos nuevos: `playwright.config.ts`, `tsconfig.e2e.json`, `e2e/invitation.spec.ts`, `e2e/reporter.ts` y `scripts/e2e-stack.mjs`. Actualizados: scripts/dependencias/lockfile de npm, ESLint, CI y documentación. No se agregó ni reescribió ninguna migración en esta revisión; se conservan las cuatro migraciones y las 67 assertions SQL/RLS.
+
+Resultado exacto de esta revisión:
+
+| Comprobación                                       | Resultado                                                                                                                                                              |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run gate:phase2`                              | Falló en el primer paso, `db:start`: Docker/Podman ausentes. Los pasos posteriores del gate no se ejecutaron.                                                          |
+| Reset desde cero / db lint / 67 assertions SQL/RLS | Pendientes; sin aprobación real.                                                                                                                                       |
+| Integración Auth/Data API/Worker/concurrencia      | Pendiente; sin stack local.                                                                                                                                            |
+| Playwright `--list --reporter=list`                | Descubre exactamente 1 test en 1 archivo; sólo colección, no ejecución.                                                                                                |
+| `npm run test:e2e`                                 | Falló preparando webServer: Supabase local no disponible; flujo de navegador no ejecutado.                                                                             |
+| Checks independientes disponibles                  | 51 unit tests aprobados (API 25, web 22, contratos 4), formato, lint, typecheck estricto —incluido E2E—, builds web/Worker dry-run y configuración estática aprobados. |
+| CI                                                 | Gate configurado con instalación de Chromium y cierre del stack aun ante fallo. No hay run real ni remote configurado.                                                 |
+
+Riesgo bloqueante pendiente: el nuevo E2E y el stack completo podrían descubrir defectos cuando se ejecuten en un entorno compatible. No se da por probado el flujo completo ni se cierra Fase 2. Fase 3 no iniciada.

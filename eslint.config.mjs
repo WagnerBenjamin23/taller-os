@@ -17,5 +17,6 @@ export default tseslint.config(
       'react-refresh/only-export-components': ['error', { allowConstantExport: true }],
     },
   },
+  { files: ['e2e/**/*.ts'], languageOptions: { globals: globals.browser } },
   { files: ['apps/api/**/*.ts'], languageOptions: { globals: globals.worker } },
 );

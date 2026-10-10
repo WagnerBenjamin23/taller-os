@@ -1,10 +1,12 @@
 # TallerOS — propuesta técnica para validar
 
-Versión 0.5 · 10 de octubre de 2026 · entrega de Fase 2 pendiente de validación SQL/RLS
+Versión 0.6 · 10 de octubre de 2026 · código de Fase 2 aprobado; gate final pendiente
 
 Estado: Fase 1 completada y revisada por el usuario. Únicamente Fase 2 autorizada: Auth, onboarding, workshops, membresías, invitaciones y RLS. Fase 3 todavía no autorizada. Fase 2 no puede declararse completada sin tests SQL/RLS aprobados realmente en CI o entorno compatible. La implementación de Fase 2 está entregada para revisión, pero sus migraciones no se aplicaron y los tests SQL/RLS e integración real no pudieron ejecutarse por ausencia de Docker/Podman. No hubo despliegue. Los ejemplos SQL de fases futuras siguen siendo ilustrativos. Ver `docs/phase-2.md` para la evidencia y los riesgos abiertos.
 
 ## 1. Decisión general
+
+Revisión final: código de las correcciones aprobado para el gate, sin autorización de Fase 3. Se agregó un único E2E Playwright contra Supabase/Auth/Mailpit, Worker y React reales: invitación de nuevo usuario, registro UI, email, PKCE y aceptación UI con taller visible. El gate canónico `npm run gate:phase2` está integrado en CI y conserva las 67 assertions SQL/RLS. En Work sigue bloqueado en `db:start` por ausencia de Docker; colección del E2E aprobada (1 test), ejecución del navegador pendiente. Unitarios y checks de código/build sí pasaron. No se modificaron migraciones ni permisos en esta revisión. La aprobación del código no sustituye la aprobación del gate ni permite cerrar Fase 2.
 
 Construir un monolito modular: React SPA, una API TypeScript en Cloudflare Workers, PostgreSQL y Auth en Supabase, y un bucket privado R2. Una base compartida con aislamiento por taller mediante RLS y claves compuestas es suficiente para el MVP.
 

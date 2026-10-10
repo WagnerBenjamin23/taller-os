@@ -36,11 +36,16 @@ npm run smoke
 npm run db:lint
 npm run db:test
 npm run test:integration
+npx playwright install --with-deps chromium
+npm run test:e2e
+npm run gate:phase2
 ```
 
 `check`: formato, lint, TypeScript strict, tests unitarios, build web y build Worker en dry-run. `smoke`: workerd real, liveness y assets; no demuestra aislamiento. `db:test`: pgTAP real. Integración: Auth real, Data API, Worker y concurrencia, exclusivamente contra Supabase local descartable; crea fixtures y requiere build previo. `db:reset` borra datos locales; nunca usar `--linked` ni URLs de producción para estos tests.
 
-CI ejecuta instalación/checks/smoke y otro job con start/reset/lint/SQL/build/integración/stop. No despliega ni usa secretos remotos. El repositorio entregado no tiene remote GitHub: la configuración de CI **no es evidencia de un run aprobado**. En Work faltan Docker/Podman; los checks DB fallan por esa limitación. No se agregaron emuladores ni bypasses al repositorio.
+CI ejecuta instalación/checks/smoke y otro job que instala Chromium y ejecuta `gate:phase2`: start → reset → lint DB → 67 assertions SQL → assets necesarios para runtime → integración real → E2E invitación → unit tests → lint → typecheck → builds → formato/config. Siempre detiene Supabase al finalizar. No despliega ni usa secretos remotos. El repositorio entregado no tiene remote GitHub: la configuración de CI **no es evidencia de un run aprobado**. En Work faltan Docker/Podman; los checks DB fallan por esa limitación. No se agregaron emuladores ni bypasses al repositorio.
+
+`test:e2e` contiene exactamente un test Playwright sin mocks de Auth/API: registro UI, email Mailpit real, confirmación/callback PKCE en otra pestaña del mismo navegador, recuperación/aceptación de invitación y taller visible. Requiere Supabase local iniciado; levanta y detiene sus propios procesos Vite/Worker en 5173/8787 con claves públicas locales. No reutiliza servidores previos: esos puertos deben estar libres. No genera traces/videos/screenshots ni imprime credenciales o enlaces de confirmación. Usa DB descartable y sólo prepara el OWNER por SQL; el destinatario nuevo se crea exclusivamente desde la UI. Ver el estado real de ejecución en `docs/phase-2.md`.
 
 ## Seguridad y permisos
 
