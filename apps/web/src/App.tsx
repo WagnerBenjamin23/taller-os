@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { healthResponseSchema } from '@talleros/contracts';
 import { appConfig } from './config';
+import { AuthPanel } from './auth/AuthPanel';
 export function App() {
   const [result, setResult] = useState('Sin verificar.');
   const [pending, setPending] = useState(false);
@@ -20,9 +21,12 @@ export function App() {
   }
   return (
     <main>
-      <p className="eyebrow">FASE 1 · VERIFICACIÓN TÉCNICA</p>
+      <p className="eyebrow">FASE 2 · IDENTIDAD Y ACCESO</p>
       <h1>{appConfig.name}</h1>
-      <p>Base de desarrollo. Las funciones del taller todavía no están implementadas.</p>
+      <p>
+        Base de desarrollo. Autenticación y acceso en validación; las funciones del taller todavía
+        no están implementadas.
+      </p>
       <button
         type="button"
         onClick={() => {
@@ -32,6 +36,7 @@ export function App() {
       >
         {pending ? 'Verificando…' : 'Verificar API'}
       </button>
+      <AuthPanel />
       <p role="status" aria-live="polite">
         {result}
       </p>

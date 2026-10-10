@@ -2,7 +2,7 @@
   "name": "taller-os",
   "version": "0.1.0",
   "private": true,
-  "description": "TallerOS — infraestructura inicial, Fase 1",
+  "description": "TallerOS — identidad y acceso, Fase 2 pendiente de validación SQL/RLS",
   "packageManager": "npm@11.9.0",
   "engines": {
     "node": ">=24 <25",
@@ -29,7 +29,8 @@
     "db:lint": "supabase db lint --local --level warning",
     "db:test": "supabase test db",
     "verify:config": "node scripts/verify-config.mjs",
-    "predev": "npm run build -w @talleros/web"
+    "predev": "npm run build -w @talleros/web",
+    "test:integration": "node scripts/tenant-integration.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
@@ -46,6 +47,7 @@
     "eslint-plugin-react-refresh": "0.5.7",
     "globals": "17.13.0",
     "jsdom": "30.1.1",
+    "pg": "8.23.1",
     "prettier": "3.9.9",
     "smol-toml": "1.9.0",
     "supabase": "2.119.0",

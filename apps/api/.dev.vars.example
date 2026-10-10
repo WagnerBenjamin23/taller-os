@@ -1,8 +1,9 @@
 # Copiar a .dev.vars sólo para desarrollo local.
 ENVIRONMENT=local
 APP_ORIGIN=http://127.0.0.1:5173
-# Reservadas para fases futuras. No requeridas para Fase 1.
+# Fase 2: URL y clave pública, nunca service_role.
 SUPABASE_URL=http://127.0.0.1:54321
 SUPABASE_PUBLISHABLE_KEY=
+# Reservadas para fases futuras, todavía no utilizadas.
 TURNSTILE_SECRET_KEY=
 PORTAL_RPC_GATEWAY_KEY=

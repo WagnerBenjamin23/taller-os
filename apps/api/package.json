@@ -10,6 +10,7 @@
     "build": "wrangler deploy --env=\"\" --dry-run --outdir dist"
   },
   "dependencies": {
+    "@supabase/supabase-js": "2.117.2",
     "@talleros/contracts": "0.1.0"
   }
 }

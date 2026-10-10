@@ -1,8 +1,8 @@
 # TallerOS — propuesta técnica para validar
 
-Versión 0.2 · 3 de octubre de 2026 · Fase 0
+Versión 0.4 · 10 de octubre de 2026 · entrega de Fase 2 pendiente de validación SQL/RLS
 
-Estado: arquitectura aprobada con los ajustes de esta versión; autorizada únicamente la Fase 1. La Fase 2 requiere revisión posterior. Este documento no implica una implementación, migración aplicada ni despliegue. Los ejemplos SQL son ilustrativos y deben convertirse en migraciones verificadas durante el desarrollo.
+Estado: Fase 1 completada y revisada por el usuario. Únicamente Fase 2 autorizada: Auth, onboarding, workshops, membresías, invitaciones y RLS. Fase 3 todavía no autorizada. Fase 2 no puede declararse completada sin tests SQL/RLS aprobados realmente en CI o entorno compatible. La implementación de Fase 2 está entregada para revisión, pero sus migraciones no se aplicaron y los tests SQL/RLS e integración real no pudieron ejecutarse por ausencia de Docker/Podman. No hubo despliegue. Los ejemplos SQL de fases futuras siguen siendo ilustrativos. Ver `docs/phase-2.md` para la evidencia y los riesgos abiertos.
 
 ## 1. Decisión general
 
@@ -418,7 +418,7 @@ Seguridad y tests se desarrollan en cada fase; fase 11 consolida, no los inaugur
 
 Antes de cada fase se explicarán objetivo y archivos afectados; después se implementará, ejecutará tests relevantes, lint, typecheck y build, corrigiendo fallas antes de avanzar y resumiendo cambios y limitaciones. En fase 0 no corresponde ejecutar tests/lint/build de una aplicación inexistente; se realizó revisión documental, de coherencia y fuentes. No se creó código de aplicación.
 
-Próximo paso autorizado: únicamente fase 1, deteniéndose para revisión al finalizar. Archivos previstos: package/lockfile, tsconfigs, ESLint/Prettier, `.gitignore`, ejemplos de variables, skeleton `apps/web` y `apps/api`, configuración Supabase/Wrangler, README y workflow de checks. No crear todas las pantallas todavía.
+Próximo paso autorizado: únicamente fase 2, deteniéndose para revisión antes de fase 3. La validación SQL/RLS es bloqueante; CI debe ejecutar migraciones y tests reales. Archivos previstos: package/lockfile, tsconfigs, ESLint/Prettier, `.gitignore`, ejemplos de variables, skeleton `apps/web` y `apps/api`, configuración Supabase/Wrangler, README y workflow de checks. No crear todas las pantallas todavía.
 
 ## 18. Fuentes oficiales
 
@@ -433,3 +433,13 @@ Las decisiones de diseño, límites internos y estimaciones son propuestas propi
 
 - [S7 — Supabase Database Functions](https://supabase.com/docs/guides/database/functions)
 - [S8 — Cloudflare Workers Streams](https://developers.cloudflare.com/workers/runtime-apis/streams/)
+
+## Decisiones concretas de la entrega de Fase 2
+
+Se implementan sólo Auth, perfiles, talleres, membresías e invitaciones. OWNER administra equipo/invitaciones; RECEPTION y MECHANIC leen el taller y su membresía propia. Una membresía inactiva bloquea ese tenant, sin suspender la identidad global ni otros tenants autorizados. Los permisos se revalidan en SQL, con escrituras únicamente por RPC auditadas y sin service_role en runtime. Implementaciones SECURITY DEFINER privadas, search_path vacío y wrappers públicos invoker; el esquema privado no se expone por Data API.
+
+Onboarding crea taller + OWNER de manera transaccional. Invitaciones usan 32 bytes aleatorios, sólo hash SHA-256 persistido, email confirmado coincidente y expiración de 7 días. Emisor debe seguir OWNER activo y no suspendido; no hay reactivación/elevación por token ni envío automático de email. Último OWNER protegido por trigger y locks por taller; identidades y workshop_id inmutables.
+
+Ledger privado real para workshop.create/invitation.accept: clave UUID por actor/operación, request hash, locks, rollback de fallos y replay por 24 horas sujeto a autorización vigente. Tombstones por 30 días; cleanup sólo operativo, aún sin scheduling. En web, CSP permite el origen Auth exacto elegido al build. Las vistas de revisión son estáticas, con controles deshabilitados y sin fixtures de negocio.
+
+Se conservan íntegramente todos los requisitos y tests de fases posteriores. La definición CI incluye migraciones, pgTAP y pruebas reales de Data API/Worker/concurrencia; no existe todavía un run aprobado. Fase 2 no se considera completada hasta obtenerlo; Fase 3 sigue no autorizada.
