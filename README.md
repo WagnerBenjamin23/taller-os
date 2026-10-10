@@ -25,7 +25,7 @@ npm run dev
 
 React/Vite: `http://127.0.0.1:5173`; Worker: `http://127.0.0.1:8787`. Vite proxifica `/api`. `predev` compila assets para Wrangler. Sin configuración Auth, el frontend muestra un skeleton explícito y las rutas de identidad responden 503; no simula sesiones.
 
-Supabase local: API 54321, PostgreSQL 54322, Studio 54323 y correo de prueba 54324. Registro exige confirmar email; los mensajes locales se revisan en el correo de prueba. PKCE, persistencia y refresh mediante SDK; la API valida el JWT contra Auth y las RPC verifican el usuario en DB. Los enlaces PKCE deben abrirse en el navegador donde comenzó el flujo. Redirects exactos para `/auth/callback` y `/reset-password`, en 5173 y 8787. No hay SMTP remoto configurado ni se envían invitaciones automáticamente: OWNER comparte el enlace generado.
+Supabase local: API 54321, PostgreSQL 54322, Studio 54323 y correo de prueba 54324. Registro exige confirmar email; los mensajes locales se revisan en el correo de prueba. PKCE, persistencia y refresh mediante SDK; la API valida el JWT con `auth.getUser(token)` contra Auth y las RPC verifican el usuario en DB. Los enlaces PKCE deben abrirse en el navegador donde comenzó el flujo. Redirects exactos para `/auth/callback` y `/reset-password`, en 5173 y 8787. No hay SMTP remoto configurado ni se envían invitaciones automáticamente: OWNER comparte el enlace generado.
 
 ## Checks y gate SQL
 
@@ -61,3 +61,13 @@ Assets: CSP generada al build con el origen exacto `VITE_SUPABASE_URL`, sin wild
 Vistas estáticas en el archivo de revisión adjunto, con controles deshabilitados y sin datos de taller inventados. Muestran el skeleton actual y los formularios existentes que requieren Auth/DB para habilitarse.
 
 Wrangler conserva entornos local/staging/production con dominios `.invalid` y workers.dev deshabilitado. Dry-run sólo empaqueta: no publica. No se aplicaron migraciones remotas ni se avanzó a Fase 3. Antes de aprobar Fase 2: pasar el job database real, corregir cualquier fallo y revisar visualmente los flujos contra Supabase local.
+
+## Correcciones de revisión de Fase 2
+
+Un destinatario sin cuenta abre #invite; la app retira el fragmento y conserva la continuación de forma local con TTL máximo de 7 días. Registro/confirmación/callback del mismo navegador y origen conservan token y key; se muestra Aceptar invitación sin copiar caracteres. Se elimina tras aceptar. El token jamás se agrega a emailRedirectTo/query/logs. localStorage es accesible al JS del origen: no es un almacén cifrado ni protege frente a XSS; CSP y validación SQL siguen siendo obligatorias. Cambiar dispositivo/origen o bloquear almacenamiento requiere reabrir el enlace; la app lo comunica sin simular aceptación.
+
+Invitaciones aceptadas no pueden revocarse ni modificarse; conflicto INVITATION_ACCEPTED, trigger y botón oculto. Cambiar acceso requiere editar membresía.
+
+**Despliegue:** private nunca puede exponerse por Data API/PostgREST. authenticated sí necesita USAGE sobre private y EXECUTE sobre entradas privadas auditadas para wrappers invoker; no retirar esos grants ni añadir private a schemas expuestos. NOLOGIN evaluado como posible reducción de privilegios de ownership; por ahora propietario postgres, superficie de entradas fija y sin SQL dinámico. Ver el análisis en arquitectura. La integración prueba schema privado y nombres cualificados directamente.
+
+Worker usa getUser(token) en cada request privada: una llamada Auth adicional, latencia y dependencia de disponibilidad con timeout. No hay JWKS/jose local ni caché de validación; DB revalida estado y membresías. getUser no se presenta como garantía general de revocación instantánea de JWT al logout.

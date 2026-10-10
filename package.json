@@ -26,7 +26,7 @@
     "db:stop": "supabase stop",
     "db:status": "supabase status",
     "db:reset": "supabase db reset",
-    "db:lint": "supabase db lint --local --level warning",
+    "db:lint": "supabase db lint --local --schema public,private --level warning --fail-on warning",
     "db:test": "supabase test db",
     "verify:config": "node scripts/verify-config.mjs",
     "predev": "npm run build -w @talleros/web",

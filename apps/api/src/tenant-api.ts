@@ -37,6 +37,7 @@ const messages: Record<string, string> = {
   INVALID_INPUT: 'Revisá los datos ingresados.',
   INVITATION_INVALID: 'La invitación no está disponible para esta cuenta.',
   INVITATION_USED: 'La invitación ya fue utilizada.',
+  INVITATION_ACCEPTED: 'La invitación aceptada no puede revocarse. Administrá la membresía.',
   MEMBER_ALREADY_EXISTS: 'El usuario ya tiene una membresía en el taller.',
   IDEMPOTENCY_KEY_REUSED: 'La clave de operación ya se utilizó con otros datos.',
   IDEMPOTENCY_KEY_EXPIRED: 'La clave de operación venció.',

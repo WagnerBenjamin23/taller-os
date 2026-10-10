@@ -23,3 +23,5 @@ CI extenderá sus gates a medida que haya implementaciones. Fase 11 consolida, n
 ## Estado de Fase 2 — 10 de octubre de 2026
 
 Los casos de identidad/RLS se escribieron en `tenant_security.test.sql` (58 assertions) y `scripts/tenant-integration.mjs`, además de conservar las 6 assertions SQL de defaults. Ninguno pasó todavía en un entorno real: Docker/Podman ausentes, PostgreSQL local inaccesible. CI configura su ejecución pero no hay run aprobado. Los 45 tests unitarios no sustituyen estos gates. Los casos de negocio/portal/archivos de fases futuras permanecen íntegros y pendientes de su fase autorizada. Ver `phase-2.md`.
+
+Correcciones de revisión: 64 assertions SQL previas preservadas + 3 de invitación terminal (67 pendientes). Integración añade aislamiento de exposición private y registro/email local/PKCE/aceptación reales, aún sin ejecutar. 51 tests unitarios pasan, incluidos continuidad de invitación/callback, TTL y UI terminal.

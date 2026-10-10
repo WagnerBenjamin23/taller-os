@@ -5,6 +5,6 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
-    include: ['src/**/*.test.tsx', 'security-headers.test.ts'],
+    include: ['src/**/*.test.tsx', 'src/**/*.test.ts', 'security-headers.test.ts'],
   },
 });

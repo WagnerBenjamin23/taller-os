@@ -17,6 +17,12 @@ import {
   type Membership,
 } from '@talleros/contracts';
 import { authClient } from './client';
+import {
+  capturePendingInvitation,
+  readPendingInvitation,
+  bindPendingInvitation,
+  clearPendingInvitation,
+} from './pending-invitation';
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: false, staleTime: 15000 } },
 });
@@ -58,8 +64,18 @@ export function AuthPanel() {
   const callbackPromise = useRef<Promise<boolean> | null>(null);
   const sessionIdentity = useRef<string | null>(null);
   useEffect(() => {
-    if (!authClient) return;
     let mounted = true;
+    try {
+      capturePendingInvitation();
+    } catch {
+      queueMicrotask(() => {
+        if (mounted)
+          setNotice(
+            'Este navegador no permite conservar la invitación. Habilitá almacenamiento local y volvé a abrir el enlace.',
+          );
+      });
+    }
+    if (!authClient) return;
     const { data } = authClient.auth.onAuthStateChange((event, next) => {
       const identity = next?.user.id ?? null;
       if (identity !== previous.current || event === 'SIGNED_OUT') {
@@ -74,11 +90,13 @@ export function AuthPanel() {
         if (event === 'PASSWORD_RECOVERY') setRecovery(true);
       }
     });
-    const code = new URLSearchParams(window.location.search).get('code');
+    const callbackParams = new URLSearchParams(window.location.search);
+    const code = callbackParams.get('code');
+    const flowId = callbackParams.get('sb_flow_id');
     if (code && !callbackPromise.current) {
       window.history.replaceState({}, '', window.location.pathname);
       callbackPromise.current = authClient.auth
-        .exchangeCodeForSession(code)
+        .exchangeCodeForSession(code, flowId ? { flowId } : undefined)
         .then(({ error }) => !error);
     }
     if (callbackPromise.current) {
@@ -180,6 +198,14 @@ function AccountForm() {
       return;
     }
     if (mode === 'register') {
+      try {
+        bindPendingInvitation(value.email);
+      } catch {
+        setNotice(
+          'No se pudo conservar la invitación. Habilitá almacenamiento local antes de registrarte.',
+        );
+        return;
+      }
       const { error } = await authClient.auth.signUp({
         email: value.email,
         password: value.password,
@@ -319,12 +345,10 @@ function RecoveryForm({ onDone }: { onDone: () => void }) {
 }
 function WorkshopAccount({ session }: { session: Session }) {
   const [selected, setSelected] = useState<Workshop | null>(null);
-  const [token, setToken] = useState(
-    () => new URLSearchParams(window.location.hash.slice(1)).get('invite') ?? '',
-  );
+  const [invitation, setInvitation] = useState(readPendingInvitation);
   const [notice, setNotice] = useState('');
   const createKey = useRef(crypto.randomUUID());
-  const acceptKey = useRef(crypto.randomUUID());
+
   useEffect(() => {
     if (window.location.hash) window.history.replaceState({}, '', window.location.pathname);
   }, []);
@@ -385,41 +409,34 @@ function WorkshopAccount({ session }: { session: Session }) {
         </label>
         <button>Crear taller</button>
       </form>
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          void api(session, '/invitations/accept', invitationAcceptedSchema, {
-            method: 'POST',
-            headers: { 'Idempotency-Key': acceptKey.current },
-            body: JSON.stringify({ token }),
-          })
-            .then(async () => {
-              setToken('');
-              acceptKey.current = crypto.randomUUID();
-              setNotice('Invitación aceptada.');
-              await queryClient.invalidateQueries({ queryKey: [session.user.id, 'workshops'] });
+      {invitation &&
+      (!invitation.email || invitation.email === session.user.email?.trim().toLowerCase()) ? (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!invitation) return;
+            void api(session, '/invitations/accept', invitationAcceptedSchema, {
+              method: 'POST',
+              headers: { 'Idempotency-Key': invitation.key },
+              body: JSON.stringify({ token: invitation.token }),
             })
-            .catch((error: unknown) => {
-              setNotice(error instanceof Error ? error.message : 'No se pudo aceptar.');
-            });
-        }}
-      >
-        <label>
-          Token de invitación
-          <input
-            value={token}
-            onChange={(event) => {
-              setToken(event.target.value);
-              acceptKey.current = crypto.randomUUID();
-            }}
-            required
-            minLength={64}
-            maxLength={64}
-            autoComplete="off"
-          />
-        </label>
-        <button>Aceptar invitación</button>
-      </form>
+              .then(async () => {
+                clearPendingInvitation();
+                setInvitation(null);
+                setNotice('Invitación aceptada.');
+                await queryClient.invalidateQueries({ queryKey: [session.user.id, 'workshops'] });
+              })
+              .catch((error: unknown) => {
+                setNotice(error instanceof Error ? error.message : 'No se pudo aceptar.');
+              });
+          }}
+        >
+          <p>Tenés una invitación pendiente. Confirmá para incorporarte al taller.</p>
+          <button>Aceptar invitación</button>
+        </form>
+      ) : invitation ? (
+        <p>La invitación corresponde a otra cuenta. Iniciá sesión con el email destinatario.</p>
+      ) : null}
       {notice && <p role="status">{notice}</p>}
       {selected && <WorkshopIdentity key={selected.id} workshop={selected} session={session} />}
     </>
@@ -534,7 +551,7 @@ function Team({ workshop, session }: { workshop: Workshop; session: Session }) {
               : new Date(invite.expires_at) < new Date()
                 ? 'vencida'
                 : 'pendiente'}{' '}
-          {!invite.revoked_at && (
+          {!invite.revoked_at && !invite.accepted_at && (
             <button
               onClick={() => {
                 void api(

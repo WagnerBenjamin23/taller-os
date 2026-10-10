@@ -118,6 +118,21 @@ try {
   }
   const ma = await member(a, users.ownerA.id),
     mb = await member(b, users.ownerB.id);
+  // PostgREST schema allowlist is a deployment requirement, not a privilege grant.
+  const privateRpc = await users.ownerA.client
+    .schema('private')
+    .rpc('create_workshop', onboarding('Private forbidden'));
+  assert.equal(privateRpc.error?.code, 'PGRST106');
+  const privateRead = await users.ownerA.client
+    .schema('private')
+    .from('idempotency_keys')
+    .select('id');
+  assert.equal(privateRead.error?.code, 'PGRST106');
+  const qualifiedRpc = await users.ownerA.client.rpc(
+    'private.create_workshop',
+    onboarding('Qualified forbidden'),
+  );
+  assert.equal(qualifiedRpc.error?.code, 'PGRST202');
   const foreignRead = await users.ownerA.client.from('workshops').select('id').eq('id', b);
   assert.equal(foreignRead.error, null);
   assert.deepEqual(foreignRead.data, []);
@@ -239,6 +254,88 @@ try {
     'PT409',
     'IDEMPOTENCY_KEY_REUSED',
   );
+  // Real registration + local SMTP confirmation + PKCE, without administrative Auth calls.
+  // Mailpit API contract: https://mailpit.axllent.org/docs/api-v1/
+  const newEmail = `signup-${tag}@example.test`;
+  const newcomer = createClient(status.API_URL, status.ANON_KEY, {
+    auth: {
+      flowType: 'pkce',
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
+  const newInvite = await rpc(users.ownerA, 'create_invitation', {
+    p_workshop: a,
+    p_email: newEmail,
+    p_role: 'RECEPTION',
+  });
+  assert.equal(newInvite.error, null);
+  // Browser persistence/URL hygiene is separately tested by the actual React flow tests.
+  const signup = await newcomer.auth.signUp({
+    email: newEmail,
+    password,
+    options: { emailRedirectTo: 'http://127.0.0.1:5173/auth/callback' },
+  });
+  assert.equal(signup.error, null);
+  assert.equal(signup.data.session, null, 'Confirmation must be required.');
+  let mail;
+  for (let i = 0; i < 60; i++) {
+    const response = await fetch(
+      'http://127.0.0.1:54324/api/v1/search?query=' + encodeURIComponent(`to:${newEmail}`),
+      { signal: AbortSignal.timeout(2000) },
+    );
+    assert(response.ok, 'Local Mailpit is required for signup confirmation.');
+    const messages = await response.json();
+    const message = messages.messages?.find((m) => m.To?.some((to) => to.Address === newEmail));
+    if (message) {
+      const body = await fetch(
+        `http://127.0.0.1:54324/api/v1/message/${encodeURIComponent(message.ID)}`,
+      );
+      assert(body.ok);
+      mail = await body.json();
+      break;
+    }
+    await delay(250);
+  }
+  assert(mail, 'Confirmation email was not delivered locally.');
+  const contents = String(mail.HTML ?? mail.Text ?? '');
+  assert(!contents.includes(newInvite.data.token), 'Invite token must never enter Auth emails.');
+  const hrefs = [...contents.matchAll(/href=["']([^"']+)["']/g)].map((m) =>
+    m[1].replaceAll('&amp;', '&'),
+  );
+  const confirmation = hrefs
+    .map((href) => new URL(href))
+    .find((u) => u.pathname === '/auth/v1/verify');
+  assert(confirmation, 'Email must contain the real confirmation link.');
+  assert.equal(confirmation.origin, url.origin, 'Confirmation remains local.');
+  const confirmed = await fetch(confirmation, {
+    redirect: 'manual',
+    signal: AbortSignal.timeout(10000),
+  });
+  assert([302, 303].includes(confirmed.status));
+  const callback = new URL(confirmed.headers.get('location'));
+  assert.equal(callback.origin, 'http://127.0.0.1:5173');
+  assert.equal(callback.pathname, '/auth/callback');
+  assert(!callback.href.includes(newInvite.data.token));
+  const authCode = callback.searchParams.get('code');
+  assert(authCode, 'Confirmation must return PKCE code.');
+  const flowId = callback.searchParams.get('sb_flow_id');
+  const exchange = await newcomer.auth.exchangeCodeForSession(
+    authCode,
+    flowId ? { flowId } : undefined,
+  );
+  assert.equal(exchange.error, null);
+  assert.equal(exchange.data.user?.email, newEmail);
+  assert(exchange.data.session);
+  const joined = await newcomer.rpc('accept_invitation', {
+    p_token: newInvite.data.token,
+    p_key: randomUUID(),
+  });
+  assert.equal(joined.error, null);
+  assert.equal(joined.data.workshop_id, a);
+  assert.equal(joined.data.role, 'RECEPTION');
+  newcomer.auth.stopAutoRefresh();
   const invitation = await rpc(users.ownerA, 'create_invitation', {
     p_workshop: a,
     p_email: users.invitee.email,
@@ -266,6 +363,14 @@ try {
     rpc(users.invitee, 'accept_invitation', { ...accept, p_key: randomUUID() }),
     'PT409',
     'INVITATION_USED',
+  );
+  await denied(
+    rpc(users.ownerA, 'revoke_invitation', {
+      p_workshop: a,
+      p_invitation: invitation.data.id,
+    }),
+    'PT409',
+    'INVITATION_ACCEPTED',
   );
   const count = await pool.query(
     'select count(*)::int n from public.workshop_members where workshop_id=$1 and user_id=$2',

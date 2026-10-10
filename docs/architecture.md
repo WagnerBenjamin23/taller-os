@@ -1,6 +1,6 @@
 # TallerOS — propuesta técnica para validar
 
-Versión 0.4 · 10 de octubre de 2026 · entrega de Fase 2 pendiente de validación SQL/RLS
+Versión 0.5 · 10 de octubre de 2026 · entrega de Fase 2 pendiente de validación SQL/RLS
 
 Estado: Fase 1 completada y revisada por el usuario. Únicamente Fase 2 autorizada: Auth, onboarding, workshops, membresías, invitaciones y RLS. Fase 3 todavía no autorizada. Fase 2 no puede declararse completada sin tests SQL/RLS aprobados realmente en CI o entorno compatible. La implementación de Fase 2 está entregada para revisión, pero sus migraciones no se aplicaron y los tests SQL/RLS e integración real no pudieron ejecutarse por ausencia de Docker/Podman. No hubo despliegue. Los ejemplos SQL de fases futuras siguen siendo ilustrativos. Ver `docs/phase-2.md` para la evidencia y los riesgos abiertos.
 
@@ -200,7 +200,7 @@ Esta alternativa es razonablemente simple: un secreto acotado y tres funciones, 
 ## 6. Autenticación y membresías
 
 1. Registro con email y contraseña mediante Supabase Auth; confirmación de email antes de habilitar operaciones del taller. Captcha de Auth cuando esté configurado; un wrapper Worker por sí solo no protege un endpoint Auth accesible directamente.
-2. Login mediante SDK. Sesión con access token breve y refresh gestionado por Supabase. Worker verifica firma y claims, emisor, expiración y audiencia con librería oficial o `jose`; no basta decodificar el JWT [S3].
+2. Login mediante SDK. Sesión con access token breve y refresh gestionado por Supabase. Worker envía el Bearer a `auth.getUser(token)` mediante el SDK oficial: validación remota por Supabase Auth y requisito de email confirmado. No implementa verificación JWT local con `jose`/JWKS ni confía en `getSession()` o claims decodificados. Esto cuesta una llamada adicional a Auth por cada request privada, agrega latencia y dependencia de disponibilidad; timeout de 10 segundos y rechazo si no puede autenticar. PostgreSQL mantiene su validación independiente de usuario confirmado/no suspendido y membresía/rol activos en cada operación [S3].
 3. Consulta de membresías propias. Sin talleres: onboarding. Uno: abrirlo. Varios: selector; persistir sólo preferencia de UI.
 4. Crear taller y membresía OWNER atómicamente; actor derivado de `auth.uid()`. Idempotency key para evitar talleres duplicados por doble envío.
 5. OWNER crea invitación con rol permitido, token aleatorio de un solo uso y vencimiento. El destinatario se autentica con email verificado coincidente; aceptar consume invitación y crea membresía en una transacción. No enviar invitaciones reales durante desarrollo.
@@ -443,3 +443,11 @@ Onboarding crea taller + OWNER de manera transaccional. Invitaciones usan 32 byt
 Ledger privado real para workshop.create/invitation.accept: clave UUID por actor/operación, request hash, locks, rollback de fallos y replay por 24 horas sujeto a autorización vigente. Tombstones por 30 días; cleanup sólo operativo, aún sin scheduling. En web, CSP permite el origen Auth exacto elegido al build. Las vistas de revisión son estáticas, con controles deshabilitados y sin fixtures de negocio.
 
 Se conservan íntegramente todos los requisitos y tests de fases posteriores. La definición CI incluye migraciones, pgTAP y pruebas reales de Data API/Worker/concurrencia; no existe todavía un run aprobado. Fase 2 no se considera completada hasta obtenerlo; Fase 3 sigue no autorizada.
+
+## Correcciones previas al cierre de Fase 2
+
+La invitación se captura antes de iniciar Auth desde #invite y se elimina de la URL. Una continuación en localStorage conserva sólo token, key de aceptación, vencimiento local de hasta siete días y email de registro. No se envía a Auth ni redirects ni query strings ni logs. Esta excepción limitada no habilita caché comercial en localStorage: es una capacidad sensible accesible al JavaScript del mismo origen, protegida por CSP/prevención XSS y validación SQL del destinatario. Expira mediante lectura/limpieza local y se elimina tras aceptar. Nuevo enlace puede sustituir el pendiente. Registro y callback en otra pestaña del mismo navegador/origen recuperan la continuación y muestran confirmación, sin entrada manual del token. PKCE exige mantener el navegador y el origen; cambiar dispositivo requiere volver a abrir el enlace y autenticarse. Almacenamiento bloqueado produce un aviso, sin simular continuidad.
+
+Invitación aceptada es terminal: revoke devuelve PT409 INVITATION_ACCEPTED y un trigger impide modificarla. La UI oculta Revocar; retirar acceso se hace administrando la membresía. Migración versionada adicional 20261003195000_terminal_invitations.sql. Se mantienen las 64 assertions originales y se añaden tres.
+
+Frontera SQL: authenticated conserva USAGE private y EXECUTE sólo sobre implementaciones auditadas requeridas por wrappers SECURITY INVOKER. No posee CREATE en private ni DML directo. Propietario SECURITY DEFINER actual: postgres de migración. Un NOLOGIN de privilegios mínimos reduciría alcance si se comprometiera una función, pero requiere un mapa adicional de ownership, grants de tablas/Auth, helpers y defaults, probado sobre Supabase real. Se mantiene el propietario actual y su superficie fija, sin SQL dinámico; NOLOGIN no reemplaza el control de exposición PostgREST. Requisito bloqueante de despliegue: private nunca debe estar entre los schemas expuestos. Verificar config local y la configuración efectiva del proyecto remoto; no conceder acceso directo a la base a roles de aplicación. Integración real prueba headers de schema privado y nombre cualificado, esperando PGRST106/PGRST202. Esas pruebas siguen pendientes de ejecución, no se presentan como evidencia aprobada.

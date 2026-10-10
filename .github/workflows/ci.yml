@@ -38,7 +38,14 @@ jobs:
       - run: npm run db:reset
       - run: npm run db:lint
       - run: npm run db:test
-      - run: npm run build
+      # Assets are a runtime prerequisite, not the final build gate.
+      - run: npm run build -w @talleros/web
       - run: npm run test:integration
+      - run: npm test
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm run format:check
+      - run: npm run verify:config
       - if: always()
         run: npm run db:stop

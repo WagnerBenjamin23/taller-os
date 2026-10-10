@@ -45,6 +45,8 @@ Prefijo `/api/v1`; todas requieren JWT confirmado excepto health. No existe endp
 | `20261003193000_identity_and_tenants.sql` | 4 tablas públicas, enum, ledger privado, índices/constraints, trigger de perfil, RLS y protección de identidades/último OWNER | Nueva; no aplicada      |
 | `20261003194000_tenant_operations.sql`    | 7 RPC públicas invoker, implementaciones privadas, idempotencia y grants explícitos                                           | Nueva; no aplicada      |
 
+Nueva corrección versionada: `20261003195000_terminal_invitations.sql`, trigger de terminalidad y reemplazo restringido de revoke. Sin ejecución SQL local. Los grants existentes se preservan.
+
 `anon`: sin SELECT/DML/EXECUTE de entradas privadas. `authenticated`: SELECT del perfil propio y talleres activos. OWNER lee el roster de su taller; RECEPTION/MECHANIC sólo su membresía. Ningún rol de aplicación escribe tablas directamente. Invitaciones no tienen SELECT directo; su RPC lista metadatos sin token/hash. Ledger y limpieza inaccesibles a la aplicación. El esquema `private` no está expuesto por Data API.
 
 Las funciones SECURITY DEFINER son propiedad del rol de migración postgres. Esta es una superficie privilegiada: sólo se otorga EXECUTE a entradas auditadas, nunca helpers de ledger/cleanup/triggers. Los roles se consultan en DB y no se confían al JWT. Una cuenta puede pertenecer a varios talleres sin heredar el rol OWNER de uno hacia otro.
@@ -58,7 +60,7 @@ Miembro inactivo no accede a ese taller; sigue pudiendo leer su propio perfil de
 | Formato                  | Aprobado                                                                 |
 | ESLint sin warnings      | Aprobado                                                                 |
 | TypeScript strict        | Aprobado                                                                 |
-| Vitest                   | 45 tests aprobados: API 25, web 16, contratos 4                          |
+| Vitest                   | 51 tests aprobados: API 25, web 22, contratos 4                          |
 | Build web                | Aprobado                                                                 |
 | Build Worker             | Dry-run aprobado, sin despliegue                                         |
 | Config Supabase/Wrangler | Verificación estática aprobada                                           |
@@ -98,7 +100,7 @@ Agregados:
 - `apps/api/src/tenant-api.ts` y `tenant-api.test.ts`.
 - `apps/web/src/auth/client.ts`, `AuthPanel.tsx`, `AuthPanel.test.tsx`.
 - `apps/web/security-headers.ts` y `security-headers.test.ts`.
-- Dos migraciones nuevas y `supabase/tests/database/tenant_security.test.sql`.
+- Tres migraciones nuevas y `supabase/tests/database/tenant_security.test.sql`.
 - `scripts/tenant-integration.mjs` y este informe.
 
 Actualizados: contratos y tests compartidos, Worker router, App/styles, configuración Vite/Vitest/TypeScript, Supabase Auth, variables de ejemplo, dependencias/lockfile, CI, README, arquitectura y matriz de pruebas. Los tests de aislamiento, permisos, concurrencia, RLS y portal de la propuesta siguen íntegros; portal se implementará en su fase autorizada.
@@ -118,3 +120,14 @@ Riesgos y pendientes:
 7. Bloqueo de localhost en navegador Work y detección de interfaces de Wrangler en este entorno. El smoke puede usar la adaptación temporal externa documentada, sin cambios al repo ni deshabilitar seguridad.
 
 La entrega se detiene para revisión. Fase 3 no iniciada.
+
+## Resultado de las cuatro correcciones solicitadas
+
+1. Continuación de invitación: helper pending-invitation.ts, almacenamiento del mismo origen con TTL/limpieza, captura previa a Auth, email de registro asociado y key persistente. Callback conserva sb_flow_id para intercambio PKCE antes de limpiar URL. UI ofrece confirmación y no entrada manual de token. Tests de React pasan registro→callback→aceptación con Auth/HTTP mockeados y tests de helper prueban TTL/URL/key. No confundirlos con end-to-end real. Integración agrega signup real, captura SMTP Mailpit, visita del link real de confirmación, intercambio PKCE y aceptación por Data API; falta ejecutarla.
+2. Privilegios: se preservan USAGE/EXECUTE necesarios; se evaluó NOLOGIN y se mantiene postgres con entradas acotadas y search_path vacío. private jamás expuesto es requisito de despliegue. Tres requests reales de integración comprueban schema privado para SELECT/RPC (PGRST106) y RPC cualificada (PGRST202). Sin ejecución real todavía. db lint ahora incluye public y private y falla ante warnings.
+3. Terminalidad: tercera migración, conflicto 409, trigger, botón oculto y tests. Tres nuevas assertions SQL más integración; las 64 anteriores permanecen sin reducir. Total pendiente SQL: 67.
+4. Documentación alineada con getUser(token), una llamada Auth adicional por request, timeout, latencia/disponibilidad y controles independientes de DB. No se promete revocación instantánea al logout.
+
+Estado del gate completo: intento de start/reset falló por ausencia de Docker/Podman; db lint/test no conectaron a PostgreSQL; integración falla antes de fixtures. No hay remote GitHub ni run CI disponible. CI ejecuta reset→lint público/privado→SQL→assets necesarios para runtime→integración→unitarios→lint→typecheck→builds→formato/config. No se considera completado. Las pruebas unitarias sí pasaron (51); formatos, lint, typecheck y builds también. No se modificaron políticas ni tests previos para hacerlos pasar.
+
+Las vistas HTML de la entrega anterior quedan como snapshot histórico: ya no existe el campo manual de token en la aplicación corregida. El ZIP corregido no incluye esas vistas históricas. No se avanzó a Fase 3 ni se desplegó.

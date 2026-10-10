@@ -31,6 +31,7 @@ vi.mock('./client', () => ({
 import { AuthPanel } from './AuthPanel';
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
   window.history.replaceState({}, '', '/');
   mock.callback = null;
   mock.getSession.mockResolvedValue({ data: { session: null }, error: null });
@@ -48,6 +49,102 @@ beforeEach(() => {
   );
 });
 describe('Auth UI mínima, no tests RLS', () => {
+  it('invitado sin cuenta vuelve del registro/callback y confirma sin copiar token', async () => {
+    const token = 'a'.repeat(64);
+    window.history.replaceState({}, '', '/#invite=' + token);
+    const view = render(<AuthPanel />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Crear cuenta' }));
+    expect(window.location.hash).toBe('');
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Invitado' } });
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'invitee@example.test' } });
+    fireEvent.change(screen.getByLabelText('Contraseña'), {
+      target: { value: 'Password-test-123' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Registrarme' }));
+    await screen.findByText('Revisá tu correo para confirmar la cuenta.');
+    expect(JSON.stringify(mock.signUp.mock.calls)).not.toContain(token);
+    view.unmount();
+    window.history.replaceState({}, '', '/auth/callback?code=confirmation-code');
+    mock.exchange.mockImplementationOnce(async () => {
+      mock.callback?.('SIGNED_IN', {
+        access_token: 'test-only',
+        user: { id: 'invitee', email: 'invitee@example.test' },
+      });
+      return { error: null };
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, options?: RequestInit) => {
+        if (url.endsWith('/invitations/accept'))
+          return new Response(
+            JSON.stringify({
+              id: '11111111-1111-4111-8111-111111111111',
+              workshop_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+              role: 'MECHANIC',
+            }),
+          );
+        expect(options?.body).toBeUndefined();
+        return new Response('[]');
+      }),
+    );
+    render(<AuthPanel />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Aceptar invitación' }));
+    await screen.findByText('Invitación aceptada.');
+    expect(screen.queryByLabelText('Token de invitación')).not.toBeInTheDocument();
+    expect(window.location.search).toBe('');
+    expect(localStorage.length).toBe(0);
+    const acceptance = vi
+      .mocked(fetch)
+      .mock.calls.find(([url]) => String(url).endsWith('/invitations/accept'));
+    expect(acceptance?.[1]?.body).toBe(JSON.stringify({ token }));
+    expect(String(acceptance?.[0])).not.toContain(token);
+  });
+  it('no ofrece revocar invitaciones aceptadas', async () => {
+    const wid = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const uid = '11111111-1111-4111-8111-111111111111';
+    const member = { id: uid, workshop_id: wid, user_id: uid, role: 'OWNER', is_active: true };
+    mock.getSession.mockResolvedValue({
+      data: { session: { access_token: 'test-only', user: { id: uid } } },
+      error: null,
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        const body = url.endsWith('/workshops')
+          ? [
+              {
+                id: wid,
+                name: 'Taller de test',
+                phone: '',
+                whatsapp: '',
+                email: '',
+                address: '',
+                tax_id: '',
+                timezone: 'America/Argentina/Buenos_Aires',
+              },
+            ]
+          : url.endsWith('/access')
+            ? member
+            : url.endsWith('/members')
+              ? []
+              : [
+                  {
+                    id: uid,
+                    email: 'accepted@example.test',
+                    role: 'MECHANIC',
+                    expires_at: '2099-01-01T00:00:00Z',
+                    accepted_at: '2026-10-10T00:00:00Z',
+                    revoked_at: null,
+                  },
+                ];
+        return new Response(JSON.stringify(body));
+      }),
+    );
+    render(<AuthPanel />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Taller de test' }));
+    await screen.findByText(/accepted@example.test/);
+    expect(screen.queryByRole('button', { name: 'Revocar' })).not.toBeInTheDocument();
+  });
   it('un cierre externo seguido de otra identidad no conserva recuperación', async () => {
     render(<AuthPanel />);
     await screen.findByRole('button', { name: 'Crear cuenta' });
@@ -113,6 +210,14 @@ describe('Auth UI mínima, no tests RLS', () => {
     await waitFor(() => expect(mock.exchange).toHaveBeenCalledTimes(1));
     expect(window.location.search).toBe('');
     await screen.findByRole('button', { name: 'Crear cuenta' });
+  });
+  it('conserva el flowId PKCE explícito antes de limpiar la URL del callback', async () => {
+    const flowId = '11111111-1111-4111-8111-111111111111';
+    window.history.replaceState({}, '', '/auth/callback?code=code&sb_flow_id=' + flowId);
+    render(<AuthPanel />);
+    await screen.findByRole('button', { name: 'Crear cuenta' });
+    expect(mock.exchange).toHaveBeenCalledWith('code', { flowId });
+    expect(window.location.search).toBe('');
   });
   it('la ruta de recuperación sola no concede permiso de cambio de contraseña', async () => {
     window.history.replaceState({}, '', '/reset-password');
